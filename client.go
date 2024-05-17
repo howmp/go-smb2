@@ -260,7 +260,7 @@ func (fs *Share) newFile(r CreateResponseDecoder, name string) *File {
 		FileName:       base(name),
 	}
 
-	f := &File{fs: fs, fd: fd, name: name, fileStat: fileStat}
+	f := &File{fs: fs, fd: fd, name: name, fileStat: fileStat, m: &sync.Mutex{}}
 
 	runtime.SetFinalizer(f, (*File).close)
 
@@ -269,6 +269,37 @@ func (fs *Share) newFile(r CreateResponseDecoder, name string) *File {
 
 func (fs *Share) Open(name string) (*File, error) {
 	return fs.OpenFile(name, os.O_RDONLY, 0)
+}
+
+type nopLock struct{}
+
+func (n *nopLock) Lock()   {}
+func (n *nopLock) Unlock() {}
+
+func (fs *Share) OpenPipe(name string) (*File, error) {
+	name = normPath(name)
+
+	if err := validatePath("open", name, false); err != nil {
+		return nil, err
+	}
+	req := &CreateRequest{
+		SecurityFlags:        0,
+		RequestedOplockLevel: SMB2_OPLOCK_LEVEL_NONE,
+		ImpersonationLevel:   Anonymous,
+		SmbCreateFlags:       0,
+		DesiredAccess:        0x12019f,
+		FileAttributes:       0,
+		ShareAccess:          7,
+		CreateDisposition:    1,
+		CreateOptions:        0x400040,
+	}
+
+	f, err := fs.createFile(name, req, true)
+	if err != nil {
+		return nil, &os.PathError{Op: "open", Path: name, Err: err}
+	}
+	f.m = &nopLock{}
+	return f, nil
 }
 
 func (fs *Share) OpenFile(name string, flag int, perm os.FileMode) (*File, error) {
@@ -1032,7 +1063,7 @@ type File struct {
 
 	offset int64
 
-	m sync.Mutex
+	m sync.Locker
 }
 
 func (f *File) Close() error {
