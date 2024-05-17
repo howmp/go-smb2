@@ -713,17 +713,7 @@ func (conn *conn) tryVerify(pkt []byte, isEncrypted bool) error {
 					return &InvalidResponseError{"unverified packet returned"}
 				}
 			}
-		} else {
-			if conn.requireSigning && !isEncrypted {
-				if conn.session != nil {
-					if conn.session.sessionFlags&(SMB2_SESSION_FLAG_IS_GUEST|SMB2_SESSION_FLAG_IS_NULL) == 0 {
-						if conn.session.sessionId == p.SessionId() {
-							return &InvalidResponseError{"signing required"}
-						}
-					}
-				}
-			}
-		}
+		} 
 	}
 
 	return nil
